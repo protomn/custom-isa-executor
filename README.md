@@ -158,9 +158,13 @@ The development of this project was informed by a range of publicly available re
 Referenced resources:
 
 EMUL8 HOWTO — http://fms.komkon.org/EMUL8/HOWTO.html
+
 Gecko05, BlueFPGA repository — https://github.com/Gecko05/BlueFPGA/tree/master
+
 Gecko05, Writing Your First Emulator (Part 1) — https://gecko05.github.io/2022/10/22/first-emulator-part1.html
+
 Gecko05, personal website repository — https://github.com/Gecko05/gecko05.github.io/tree/master
+
 Stack Overflow discussion: What are the main steps to write an instruction set simulator? — https://stackoverflow.com/questions/4587291/what-are-the-main-steps-to-write-an-instruction-set-simulator
 
 ---

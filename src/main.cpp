@@ -263,8 +263,9 @@ void load_program(CPUState &cpu, const std::vector<uint16_t> &program)
 
 int main()
 {
+    
     CPUState cpu;
-
+    
     std::cout << "TEST CASE 1: HALT IMMEDIATELY" << '\n';
     load_program(cpu, {
         0xF000 //Opcode for halt
@@ -273,12 +274,80 @@ int main()
 
     std::cout << "\nTEST CASE 2: ADD + STORE\n";
     cpu = CPUState(); // Reset
-    load_program(cpu, { 0x100A, 0x1105, 0x2001, 0x3002, 0xF000 });
+    load_program(cpu, {
+        0x100A, 
+        0x1105, 
+        0x2001, 
+        0x3002, 
+        0xF000 
+    });
     run(cpu);
 
     std::cout << "\nTEST CASE 3: DIV BY ZERO FAULT\n";
     cpu = CPUState();
-    load_program(cpu, { 0x100A, 0x1100, 0x6001, 0xF000 });
+    load_program(cpu, { 
+        0x100A, 
+        0x1100, 
+        0x6001, 
+        0xF000 
+    });
+    run(cpu);
+    
+
+    std::cout << "\nTEST CASE 4: BACKWARD JUMP (INFINITE LOOP)\n";
+    cpu = CPUState();
+    load_program(cpu, {
+        0x1001,
+        0x7001
+    });
+    run(cpu);
+
+    std::cout << "\nTEST CASE 5: TIGHT ARITHMETIC LOOP\n";
+    cpu = CPUState();
+    load_program(cpu, {
+        0x1001,
+        0x1101,
+        0x2001,
+        0x7002
+    });
+    run(cpu);
+
+    std::cout << "\nTEST CASE 6: MEMORY OVERWRITE\n";
+    cpu = CPUState();
+    load_program(cpu, {
+        0x100A,
+        0x1100,
+        0x3001,
+        0x2100,
+        0x7002
+    });
+    run(cpu);
+
+    std::cout << "\nTEST CASE 7: UNKNOWN OPCODE\n";
+    cpu = CPUState();
+    load_program(cpu, {
+        0xE000
+    });
+    run(cpu);
+
+    std::cout << "\nTEST CASE 8: FAULT IN LOOP (DIV INSIDE LOOP)\n";
+    cpu = CPUState();
+    load_program(cpu, {
+        0x1001,
+        0x1100,
+        0x6001,
+        0x7002
+    });
+    run(cpu);
+
+    std::cout << "\nTEST CASE 8: PC BOUNDARY\n";
+    cpu = CPUState();
+    size_t last_index = CPUState::RAM_SIZE - 1;
+    cpu.data[last_index] = 0xF000;
+    cpu.pc = last_index;
+    cpu.halted = false;
+    cpu.reason = HaltReason::NONE;
+    cpu.cycle_count = 0;
     run(cpu);
 
     return 0;

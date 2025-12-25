@@ -6,21 +6,6 @@
 #include <iomanip>
 #include <cstdio>
 
-// Emulating the clock cycle
-/*
-uint8_t clock_tick = 1;
-
-void emulateCycle()
-{
-    while (clock_tick < 9)
-    {
-        process_tick(clock_tick);
-        clock_tick++;
-    }
-
-    clock_tick = 1;
-}*/
-
 /*
 We treat division by zero as an architectural fault. 
 This is because in the previously implemented model, the CPU halted silently 
@@ -67,6 +52,10 @@ struct CPUState
     // Halted is a CPU architectural state, not a local control variable.
     bool halted = false;
     HaltReason reason = HaltReason::NONE; //Single Source of Truth.
+
+    // Implementation of observational cycle counting.
+    // This value is never used as a conditional for logic.
+    uint64_t cycle_count = 0;
     
 };
 
@@ -97,16 +86,18 @@ void print_cpu_state(const CPUState& cpu, bool final = false) {
     if (final) std::cout << "\n========== FINAL CPU STATE ==========\n";
     else       std::cout << "--- Step (PC: " << std::dec << cpu.pc << ") ---\n";
 
-    // Format registers as 4-digit uppercase hex using I/O manipulators
+    // Format registers as 4-digit uppercase hex
     std::cout << "Registers: "
               << "R0:" << std::setfill('0') << std::setw(4) << std::hex << std::uppercase << cpu.GenPR[0] << " "
               << "R1:" << std::setfill('0') << std::setw(4) << std::hex << std::uppercase << cpu.GenPR[1] << " "
               << "R2:" << std::setfill('0') << std::setw(4) << std::hex << std::uppercase << cpu.GenPR[2] << " "
               << "R3:" << std::setfill('0') << std::setw(4) << std::hex << std::uppercase << cpu.GenPR[3] << "\n";
 
-    // Format PC, Flags, and Halted status
+    // Format PC (Hex), Flags (Dec), Cycles (Dec), and Halted status
+    // Note: We use std::dec before printing total_cycles to ensure it's readable
     std::cout << "PC: " << std::setfill('0') << std::setw(4) << std::hex << cpu.pc 
               << " | SF: " << std::dec << (int)cpu.sf 
+              << " | Cycles: " << cpu.cycle_count
               << " | Halted: " << (cpu.halted ? "YES" : "NO") 
               << " | Reason: " << to_string(cpu.reason) << "\n";
     
@@ -145,17 +136,22 @@ void run(CPUState &cpu)
 
         bool suppress_default_pc_increment = false;
 
+        // Using a local cost tracker
+        uint64_t local_cycle_cost = 0;
+
         switch (opcode)
         {
             case 0x1: // LOAD Immediate: REG[dest] = operand
             {
                 cpu.GenPR[dest_reg] = operand;
+                local_cycle_cost = 1;
                 break;
             }
             
             case 0x2: // ADD: REG[dest] = REG[dest] + REG[source]
                 {
                     cpu.GenPR[dest_reg] += cpu.GenPR[source_reg];
+                    local_cycle_cost = 1;
 
                     //Update status flag is result is 0;
                     cpu.sf = (cpu.GenPR[dest_reg] == 0);
@@ -172,6 +168,8 @@ void run(CPUState &cpu)
                 uint16_t reg_addr = instruction & 0x3; //using the bottom 2 bits to pick a register.
                 uint16_t target_addr = cpu.GenPR[reg_addr];
                 cpu.data[target_addr] = cpu.GenPR[dest_reg];
+
+                local_cycle_cost = 4; // Memory access is expensive.
                 break;
             }
             
@@ -179,6 +177,7 @@ void run(CPUState &cpu)
                 {
                 cpu.GenPR[dest_reg] -= cpu.GenPR[source_reg];
                 cpu.sf = (cpu.GenPR[dest_reg] == 0);
+                local_cycle_cost = 1;
                 break;
                 }
             
@@ -186,6 +185,7 @@ void run(CPUState &cpu)
                 {
                 cpu.GenPR[dest_reg] *= cpu.GenPR[source_reg];
                 cpu.sf = (cpu.GenPR[dest_reg] == 0);
+                local_cycle_cost = 1;
                 break;
                 }
             
@@ -196,12 +196,14 @@ void run(CPUState &cpu)
                     cpu.halted = true;
                     cpu.reason = HaltReason::DIVISION_BY_ZERO;
                     suppress_default_pc_increment = true;
+                    local_cycle_cost = 1;
                 }
                 else
                 {
                     //SUCCESS -> Atomic update of register and sf.
                     cpu.GenPR[dest_reg] /= cpu.GenPR[source_reg];
                     cpu.sf = (cpu.GenPR[dest_reg] == 0);
+                    local_cycle_cost = 12;
                 }
                 break;
                 }
@@ -210,6 +212,7 @@ void run(CPUState &cpu)
                 {
                 cpu.pc = address;
                 suppress_default_pc_increment = true;
+                local_cycle_cost = 2; // Metaphorical pipeline flush cost.
                 break;
                 }
             
@@ -218,6 +221,7 @@ void run(CPUState &cpu)
                 cpu.halted = true;
                 cpu.reason = HaltReason::SUCCESS;
                 suppress_default_pc_increment = true;
+                local_cycle_cost = 1;
                 break;
             }
 
@@ -226,9 +230,12 @@ void run(CPUState &cpu)
                 cpu.halted = true;
                 cpu.reason = HaltReason::UNKNOWN_OPCODE;
                 suppress_default_pc_increment = true;
+                local_cycle_cost = 1;
                 break;
             }
         }
+        
+        cpu.cycle_count += local_cycle_cost;
 
         if (!suppress_default_pc_increment) // Applies default PC increment rule.
         {
@@ -270,7 +277,7 @@ int main()
     run(cpu);
 
     std::cout << "\nTEST CASE 3: DIV BY ZERO FAULT\n";
-    cpu = CPUState(); // Reset
+    cpu = CPUState();
     load_program(cpu, { 0x100A, 0x1100, 0x6001, 0xF000 });
     run(cpu);
 
